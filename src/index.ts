@@ -4,6 +4,15 @@ import { createHmac } from "node:crypto";
 import fs from "node:fs";
 import { grist } from "./grist";
 
+interface Flag {
+  id: number;
+  vtt: string;
+  timestamp: string;
+  text: string;
+  fixed: boolean;
+  comment?: string;
+}
+
 async function getRawGitHubFile(
   repo: string,
   branch: string,
@@ -148,6 +157,40 @@ const app = new Elysia()
         slug: t.String(),
         lang: t.String(),
         flagId: t.String(),
+      }),
+    }
+  )
+  .get(
+    "/errata/:event/:slug/:lang",
+    async ({ params }) => {
+      const vttPath = `${params.event}/${params.slug}_${params.lang}.vtt`;
+
+      const records = (await grist.fetchTable("Flags")) as unknown as Flag[];
+
+      const filteredRecords = records.filter(
+        (record) => record.vtt === vttPath && record.fixed === false
+      );
+
+      const errata = filteredRecords
+        .map((record) => ({
+          id: record.id,
+          timestamp: record.timestamp,
+          text: record.text,
+        }))
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+
+      const comments = filteredRecords
+        .map((record) => record.comment || "")
+        .filter((comment) => comment && comment.trim())
+        .map((comment) => comment.trim());
+
+      return { errata, comments };
+    },
+    {
+      params: t.Object({
+        event: t.String(),
+        slug: t.String(),
+        lang: t.String(),
       }),
     }
   );
